@@ -33,22 +33,23 @@ import (
 
 var (
 	// Flags that can be passed in on the command line
-	ndt7Addr          = flag.String("ndt7_addr", ":443", "The address and port to use for the ndt7 test")
-	ndt7AddrCleartext = flag.String("ndt7_addr_cleartext", ":80", "The address and port to use for the ndt7 cleartext test")
-	ndt7MaxMsgSize    = flag.Int64("ndt7_max_msg_size", 16777216, "The maximum value of upload message size")
-	ndt5Addr          = flag.String("ndt5_addr", ":3001", "The address and port to use for the unencrypted ndt5 test")
-	ndt5WsAddr        = flag.String("ndt5_ws_addr", "127.0.0.1:3002", "The address and port to use for the ndt5 WS test")
-	ndt5WssAddr       = flag.String("ndt5_wss_addr", ":3010", "The address and port to use for the ndt5 WSS test")
-	certFile          = flag.String("cert", "", "The file with server certificates in PEM format.")
-	keyFile           = flag.String("key", "", "The file with server key in PEM format.")
-	tlsVersion        = flag.String("tls.version", "", "Minimum TLS version. Valid values: 1.2 or 1.3")
-	dataDir           = flag.String("datadir", "/var/spool/ndt", "The directory in which to write data files")
-	htmlDir           = flag.String("htmldir", "html", "The directory from which to serve static web content.")
-	deploymentLabels  = flagx.KeyValue{}
-	tokenVerifyKey    = flagx.FileBytesArray{}
-	tokenRequired5    bool
-	tokenRequired7    bool
-	tokenMachine      string
+	ndt7Addr             = flag.String("ndt7_addr", ":443", "The address and port to use for the ndt7 test")
+	ndt7AddrCleartext    = flag.String("ndt7_addr_cleartext", ":80", "The address and port to use for the ndt7 cleartext test")
+	ndt7MaxMsgSize       = flag.Int64("ndt7_max_msg_size", 16777216, "The maximum value of upload message size")
+	ndt7MaxScaledMsgSize = flag.Int64("ndt7_max_scaled_msg_size", 1048576, "The maximum value of download message size")
+	ndt5Addr             = flag.String("ndt5_addr", ":3001", "The address and port to use for the unencrypted ndt5 test")
+	ndt5WsAddr           = flag.String("ndt5_ws_addr", "127.0.0.1:3002", "The address and port to use for the ndt5 WS test")
+	ndt5WssAddr          = flag.String("ndt5_wss_addr", ":3010", "The address and port to use for the ndt5 WSS test")
+	certFile             = flag.String("cert", "", "The file with server certificates in PEM format.")
+	keyFile              = flag.String("key", "", "The file with server key in PEM format.")
+	tlsVersion           = flag.String("tls.version", "", "Minimum TLS version. Valid values: 1.2 or 1.3")
+	dataDir              = flag.String("datadir", "/var/spool/ndt", "The directory in which to write data files")
+	htmlDir              = flag.String("htmldir", "html", "The directory from which to serve static web content.")
+	deploymentLabels     = flagx.KeyValue{}
+	tokenVerifyKey       = flagx.FileBytesArray{}
+	tokenRequired5       bool
+	tokenRequired7       bool
+	tokenMachine         string
 
 	// A metric to use to signal that the server is in lame duck mode.
 	lameDuck = promauto.NewGauge(prometheus.GaugeOpts{
@@ -219,11 +220,12 @@ func main() {
 	ndt7Mux := http.NewServeMux()
 	ndt7Mux.Handle("/", http.FileServer(http.Dir(*htmlDir)))
 	ndt7Handler := &handler.Handler{
-		DataDir:        *dataDir,
-		SecurePort:     *ndt7Addr,
-		InsecurePort:   *ndt7AddrCleartext,
-		ServerMetadata: serverMetadata,
-		MaxMsgSize:     *ndt7MaxMsgSize,
+		DataDir:          *dataDir,
+		SecurePort:       *ndt7Addr,
+		InsecurePort:     *ndt7AddrCleartext,
+		ServerMetadata:   serverMetadata,
+		MaxMsgSize:       *ndt7MaxMsgSize,
+		MaxScaledMsgSize: *ndt7MaxScaledMsgSize,
 	}
 	ndt7Mux.Handle(spec.DownloadURLPath, http.HandlerFunc(ndt7Handler.Download))
 	ndt7Mux.Handle(spec.UploadURLPath, http.HandlerFunc(ndt7Handler.Upload))

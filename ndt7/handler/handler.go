@@ -38,8 +38,10 @@ type Handler struct {
 	InsecurePort string
 	// ServerMetadata contains deployment-specific metadata.
 	ServerMetadata []metadata.NameValue
-	//
+	// The maximum value of upload message size
 	MaxMsgSize int64
+	// The maximum value of download message size
+	MaxScaledMsgSize int64
 }
 
 // warnAndClose emits message as a warning and the sends a Bad Request
@@ -98,7 +100,7 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	var rate float64
 	if kind == spec.SubtestDownload {
 		result.Download = data
-		err = download.Do(req.Context(), conn, data)
+		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize)
 		rate = downRate(data.ServerMeasurements)
 	} else if kind == spec.SubtestUpload {
 		result.Upload = data

@@ -32,7 +32,7 @@ func makePreparedMessage(size int) (*websocket.PreparedMessage, error) {
 // Liveness guarantee: the sender will not be stuck sending for more than the
 // MaxRuntime of the subtest. This is enforced by setting the write deadline to
 // Time.Now() + MaxRuntime.
-func Start(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData) error {
+func Start(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, MaxScaledMsgSize int64) error {
 	logging.Logger.Debug("sender: start")
 	proto := ndt7metrics.ConnLabel(conn)
 
@@ -106,7 +106,7 @@ func Start(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData) 
 			// scale deployments of this algorithm anyway, so there's no point
 			// in engaging in fine grained calibration before knowing.
 			totalSent += int64(bulkMessageSize)
-			if int64(bulkMessageSize) >= spec.MaxScaledMessageSize {
+			if int64(bulkMessageSize) >= MaxScaledMsgSize {
 				continue // No further scaling is required
 			}
 			if int64(bulkMessageSize) > totalSent/spec.ScalingFraction {
