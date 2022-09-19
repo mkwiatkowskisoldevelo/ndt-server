@@ -36,7 +36,7 @@ var (
 	ndt7Addr             = flag.String("ndt7_addr", ":443", "The address and port to use for the ndt7 test")
 	ndt7AddrCleartext    = flag.String("ndt7_addr_cleartext", ":80", "The address and port to use for the ndt7 cleartext test")
 	ndt7MaxMsgSize       = flag.Int64("ndt7_max_msg_size", 16777216, "The maximum value of upload message size")
-	ndt7MaxScaledMsgSize = flag.Int64("ndt7_max_scaled_msg_size", 1048576, "The maximum value of download message size")
+	ndt7MaxScaledMsgSize = flag.Int64("ndt7_max_scaled_msg_size", 8388608, "The maximum value of download message size")
 	ndt5Addr             = flag.String("ndt5_addr", ":3001", "The address and port to use for the unencrypted ndt5 test")
 	ndt5WsAddr           = flag.String("ndt5_ws_addr", "127.0.0.1:3002", "The address and port to use for the ndt5 WS test")
 	ndt5WssAddr          = flag.String("ndt5_wss_addr", ":3010", "The address and port to use for the ndt5 WSS test")
