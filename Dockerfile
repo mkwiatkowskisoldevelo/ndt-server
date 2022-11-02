@@ -8,4 +8,20 @@ FROM alpine:3.14
 COPY --from=ndt-server-build /go/bin/ndt-server /
 ADD ./html /html
 WORKDIR /
+
+ARG USER=rootless
+ARG UID=1000
+ARG GID=1001
+
+RUN addgroup --system --gid $GID rootless_users
+RUN adduser -D -u $UID -g $GID $USER
+
+RUN mkdir ndtdata
+
+RUN chown -R $USER:users /ndt-server \
+    /ndtdata \
+    /html
+
+USER $USER:users
+
 ENTRYPOINT ["/ndt-server"]
