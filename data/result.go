@@ -63,6 +63,10 @@ type NDT7Result struct {
 	ClientIP   string
 	ClientPort int
 
+	// TODO OPIS JAKIŚ
+	VpimTestUUID         string
+	VpimTestThreadNumber int
+
 	StartTime time.Time
 	EndTime   time.Time
 
