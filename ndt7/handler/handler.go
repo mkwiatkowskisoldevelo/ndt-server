@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -86,8 +87,12 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	// Collect most client metadata from request parameters.
 	appendClientMetadata(data, req.URL.Query())
 	data.ServerMetadata = h.ServerMetadata
+
+	//retrieves test info from request params
+	vpimTestUUID, vpimTestThreadNumber := vpimTestInfo(req)
+
 	// Create ultimate result.
-	result := setupResult(conn)
+	result := setupResult(conn, vpimTestUUID, vpimTestThreadNumber)
 	result.StartTime = time.Now().UTC()
 
 	// Guarantee results are written even if function panics.
@@ -118,6 +123,30 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	}
 }
 
+// Retrieves vPIM related info from request. Currently, there are variables associated with multithreaded testing that are passed as query parameters.
+func vpimTestInfo(req *http.Request) (string, int) {
+	vpimTestUUID := req.URL.Query().Get("vpimTestUUID")
+
+	if vpimTestUUID == "" {
+		logging.Logger.Warn("Missing vpimTestUUID value")
+	}
+
+	vpimTestThreadNumberParamValue := req.URL.Query().Get("vpimTestThreadNumber")
+
+	vpimTestThreadNumber := 1
+	var err error = nil
+	if vpimTestThreadNumberParamValue == "" {
+		logging.Logger.Warn("Missing vpimTestThreadNumber value. vpimTestThreadNumber set to 1.")
+	} else {
+		vpimTestThreadNumber, err = strconv.Atoi(vpimTestThreadNumberParamValue)
+		if err != nil {
+			logging.Logger.Warn("Incorrect value for vpimTestThreadNumber: " + vpimTestThreadNumberParamValue + ". vpimTestThreadNumber set to 1.")
+			vpimTestThreadNumber = 1
+		}
+	}
+	return vpimTestUUID, vpimTestThreadNumber
+}
+
 // setupConn negotiates a websocket connection. The writer argument is the HTTP
 // response writer. The request argument is the HTTP request that we received.
 func setupConn(writer http.ResponseWriter, request *http.Request) *websocket.Conn {
@@ -146,7 +175,7 @@ func setupConn(writer http.ResponseWriter, request *http.Request) *websocket.Con
 }
 
 // setupResult creates an NDT7Result from the given conn.
-func setupResult(conn *websocket.Conn) *data.NDT7Result {
+func setupResult(conn *websocket.Conn, vpimTestUUID string, vpimTestThreadNumber int) *data.NDT7Result {
 	// NOTE: unless we plan to run the NDT server over different protocols than TCP,
 	// then we expect RemoteAddr and LocalAddr to always return net.TCPAddr types.
 	clientAddr := netx.ToTCPAddr(conn.RemoteAddr())
@@ -158,12 +187,14 @@ func setupResult(conn *websocket.Conn) *data.NDT7Result {
 		serverAddr = &net.TCPAddr{IP: net.ParseIP("::1"), Port: 1}
 	}
 	result := &data.NDT7Result{
-		GitShortCommit: prometheusx.GitShortCommit,
-		Version:        version.Version,
-		ClientIP:       clientAddr.IP.String(),
-		ClientPort:     clientAddr.Port,
-		ServerIP:       serverAddr.IP.String(),
-		ServerPort:     serverAddr.Port,
+		GitShortCommit:       prometheusx.GitShortCommit,
+		Version:              version.Version,
+		ClientIP:             clientAddr.IP.String(),
+		ClientPort:           clientAddr.Port,
+		ServerIP:             serverAddr.IP.String(),
+		ServerPort:           serverAddr.Port,
+		VpimTestUUID:         vpimTestUUID,
+		VpimTestThreadNumber: vpimTestThreadNumber,
 	}
 	return result
 }
