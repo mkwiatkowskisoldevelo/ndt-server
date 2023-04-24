@@ -88,7 +88,7 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	appendClientMetadata(data, req.URL.Query())
 	data.ServerMetadata = h.ServerMetadata
 
-	//opis jakiś
+	//retrieves test info from request params
 	vpimTestUUID, vpimTestThreadNumber := vpimTestInfo(req)
 
 	// Create ultimate result.
@@ -123,7 +123,7 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	}
 }
 
-// Retrieves vPIM related data from request. Currently, there are variables associated with multithreaded testing that are passed as query parameters.
+// Retrieves vPIM related info from request. Currently, there are variables associated with multithreaded testing that are passed as query parameters.
 func vpimTestInfo(req *http.Request) (string, int) {
 	vpimTestUUID := req.URL.Query().Get("vpimTestUUID")
 

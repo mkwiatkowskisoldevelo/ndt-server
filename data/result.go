@@ -63,8 +63,9 @@ type NDT7Result struct {
 	ClientIP   string
 	ClientPort int
 
-	// TODO OPIS JAKIŚ
-	VpimTestUUID         string
+	// Variable for test identification and merging.
+	VpimTestUUID string
+	// The variable that tells you how many threads the test is of which these results are part.
 	VpimTestThreadNumber int
 
 	StartTime time.Time
