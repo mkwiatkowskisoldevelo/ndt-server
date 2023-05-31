@@ -18,6 +18,7 @@ func Do(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, Max
 	// Implementation note: use child contexts so the sender is strictly time
 	// bounded. After timeout, the sender closes the conn, which results in the
 	// receiver completing.
+	WaitForMessage(ctx, conn, MaxScaledMessageSize)
 
 	// Receive and save client-provided measurements in data.
 	recv := receiver.StartDownloadReceiverAsync(ctx, conn, data)
