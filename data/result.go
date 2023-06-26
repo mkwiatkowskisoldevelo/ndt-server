@@ -65,8 +65,10 @@ type NDT7Result struct {
 
 	// Variable for test identification and merging.
 	VpimTestUUID string
-	// The variable that tells you how many threads the test is of which these results are part.
+	// The property that tells you how many threads the test is of which these results are part.
 	VpimTestThreadNumber int
+	// This property holds index number of the current thread.
+	VpimTestThreadIndex int
 
 	StartTime time.Time
 	EndTime   time.Time

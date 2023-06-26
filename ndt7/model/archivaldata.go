@@ -50,6 +50,7 @@ type ConnectionInfo struct {
 type BBRInfo struct {
 	inetdiag.BBRInfo
 	ElapsedTime int64
+	Date        time.Time
 }
 
 // The TCPInfo struct contains information measured using TCP_INFO. This
@@ -57,4 +58,5 @@ type BBRInfo struct {
 type TCPInfo struct {
 	tcp.LinuxTCPInfo
 	ElapsedTime int64
+	Date        time.Time
 }

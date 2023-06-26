@@ -89,10 +89,10 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	data.ServerMetadata = h.ServerMetadata
 
 	//retrieves test info from request params
-	vpimTestUUID, vpimTestThreadNumber := vpimTestInfo(req)
+	vpimTestUUID, vpimTestThreadNumber, vpimTestThreadIndex := vpimTestInfo(req)
 
 	// Create ultimate result.
-	result := setupResult(conn, vpimTestUUID, vpimTestThreadNumber)
+	result := setupResult(conn, vpimTestUUID, vpimTestThreadNumber, vpimTestThreadIndex)
 	result.StartTime = time.Now().UTC()
 
 	// Guarantee results are written even if function panics.
@@ -124,7 +124,7 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 }
 
 // Retrieves vPIM related info from request. Currently, there are variables associated with multithreaded testing that are passed as query parameters.
-func vpimTestInfo(req *http.Request) (string, int) {
+func vpimTestInfo(req *http.Request) (string, int, int) {
 	vpimTestUUID := req.URL.Query().Get("vpimTestUUID")
 
 	if vpimTestUUID == "" {
@@ -132,7 +132,6 @@ func vpimTestInfo(req *http.Request) (string, int) {
 	}
 
 	vpimTestThreadNumberParamValue := req.URL.Query().Get("vpimTestThreadNumber")
-
 	vpimTestThreadNumber := 1
 	var err error = nil
 	if vpimTestThreadNumberParamValue == "" {
@@ -144,7 +143,21 @@ func vpimTestInfo(req *http.Request) (string, int) {
 			vpimTestThreadNumber = 1
 		}
 	}
-	return vpimTestUUID, vpimTestThreadNumber
+
+	vpimTestThreadIndexParamValue := req.URL.Query().Get("vpimTestThreadIndex")
+	vpimTestThreadIndex := 0
+	err = nil
+	if vpimTestThreadIndexParamValue == "" {
+		logging.Logger.Warn("Missing vpimTestThreadIndex value. vpimTestThreadIndex set to 0.")
+	} else {
+		vpimTestThreadIndex, err = strconv.Atoi(vpimTestThreadIndexParamValue)
+		if err != nil {
+			logging.Logger.Warn("Incorrect value for vpimTestThreadIndex: " + vpimTestThreadIndexParamValue + ". vpimTestThreadIndex set to 0.")
+			vpimTestThreadNumber = 0
+		}
+	}
+
+	return vpimTestUUID, vpimTestThreadNumber, vpimTestThreadIndex
 }
 
 // setupConn negotiates a websocket connection. The writer argument is the HTTP
@@ -175,7 +188,7 @@ func setupConn(writer http.ResponseWriter, request *http.Request) *websocket.Con
 }
 
 // setupResult creates an NDT7Result from the given conn.
-func setupResult(conn *websocket.Conn, vpimTestUUID string, vpimTestThreadNumber int) *data.NDT7Result {
+func setupResult(conn *websocket.Conn, vpimTestUUID string, vpimTestThreadNumber int, vpimTestThreadIndex int) *data.NDT7Result {
 	// NOTE: unless we plan to run the NDT server over different protocols than TCP,
 	// then we expect RemoteAddr and LocalAddr to always return net.TCPAddr types.
 	clientAddr := netx.ToTCPAddr(conn.RemoteAddr())
@@ -195,6 +208,7 @@ func setupResult(conn *websocket.Conn, vpimTestUUID string, vpimTestThreadNumber
 		ServerPort:           serverAddr.Port,
 		VpimTestUUID:         vpimTestUUID,
 		VpimTestThreadNumber: vpimTestThreadNumber,
+		VpimTestThreadIndex:  vpimTestThreadIndex,
 	}
 	return result
 }
