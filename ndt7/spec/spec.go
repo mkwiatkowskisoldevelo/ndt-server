@@ -55,6 +55,9 @@ const DefaultRuntime = 10 * time.Second
 // MaxRuntime is the maximum runtime of a subtest
 const MaxRuntime = 15 * time.Second
 
+// MaxRuntime is the maximum runtime of a subtest
+const WaitForMessageTimeout = 5 * time.Second
+
 // SubtestKind indicates the subtest kind
 type SubtestKind string
 
