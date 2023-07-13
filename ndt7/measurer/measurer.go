@@ -58,7 +58,7 @@ func (m *Measurer) getSocketAndPossiblyEnableBBR() (netx.ConnInfo, error) {
 	return ci, nil
 }
 
-func measure(measurement *model.Measurement, ci netx.ConnInfo, elapsed time.Duration) {
+func measure(measurement *model.Measurement, ci netx.ConnInfo, date time.Time, elapsed time.Duration) {
 	// Implementation note: we always want to sample BBR before TCPInfo so we
 	// will know from TCPInfo if the connection has been closed.
 	t := int64(elapsed / time.Microsecond)
@@ -67,10 +67,12 @@ func measure(measurement *model.Measurement, ci netx.ConnInfo, elapsed time.Dura
 		measurement.BBRInfo = &model.BBRInfo{
 			BBRInfo:     bbrinfo,
 			ElapsedTime: t,
+			Date:        date,
 		}
 		measurement.TCPInfo = &model.TCPInfo{
 			LinuxTCPInfo: tcpInfo,
 			ElapsedTime:  t,
+			Date:         date,
 		}
 	}
 }
@@ -106,7 +108,7 @@ func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- m
 	m.ticker = ticker
 	for now := range ticker.C {
 		var measurement model.Measurement
-		measure(&measurement, ci, now.Sub(start))
+		measure(&measurement, ci, now, now.Sub(start))
 		measurement.ConnectionInfo = connectionInfo
 		dst <- measurement // Liveness: this is blocking
 	}
