@@ -25,6 +25,7 @@ import (
 	"github.com/m-lab/ndt-server/ndt7/listener"
 	"github.com/m-lab/ndt-server/ndt7/spec"
 	"github.com/m-lab/ndt-server/platformx"
+	"github.com/m-lab/ndt-server/util"
 	"github.com/m-lab/ndt-server/version"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,7 +43,8 @@ var (
 	ndt5WssAddr          = flag.String("ndt5_wss_addr", ":3010", "The address and port to use for the ndt5 WSS test")
 	certFile             = flag.String("cert", "", "The file with server certificates in PEM format.")
 	keyFile              = flag.String("key", "", "The file with server key in PEM format.")
-	tlsVersion           = flag.String("tls.version", "", "Minimum TLS version. Valid values: 1.2 or 1.3")
+	tlsVersion           = flag.String("tls.version", "1.2", "Minimum TLS version. Valid values: 1.2 or 1.3")
+	tlsCiphers           = flag.String("tls.ciphers", "TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", "TLS ciphers list to be supported by the server. The value should be a string with comma separated values, i.e.: TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384")
 	dataDir              = flag.String("datadir", "/var/spool/ndt", "The directory in which to write data files")
 	htmlDir              = flag.String("htmldir", "html", "The directory from which to serve static web content.")
 	deploymentLabels     = flagx.KeyValue{}
@@ -105,14 +107,25 @@ func init() {
 // httpServer creates a new *http.Server with explicit Read and Write timeouts.
 func httpServer(addr string, handler http.Handler) *http.Server {
 	tlsconf := &tls.Config{}
+	ciphers, err := util.ConvertCipherNamesToIdsArray(*tlsCiphers)
+	if err != nil {
+		log.Printf("error while converting configured cipher names to their IDs: %v\n", err)
+		ciphers = nil
+	}
 	switch *tlsVersion {
 	case "1.3":
 		tlsconf = &tls.Config{
-			MinVersion: tls.VersionTLS13,
+			MinVersion:   tls.VersionTLS13,
+			CipherSuites: ciphers,
 		}
 	case "1.2":
 		tlsconf = &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion:   tls.VersionTLS12,
+			CipherSuites: ciphers,
+		}
+	default:
+		tlsconf = &tls.Config{
+			CipherSuites: ciphers,
 		}
 	}
 	return &http.Server{
