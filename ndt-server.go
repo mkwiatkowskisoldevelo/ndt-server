@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -103,6 +104,9 @@ func catchSigterm() {
 
 func init() {
 	golog.SetFlags(golog.LUTC | golog.LstdFlags | golog.Lshortfile)
+	if strings.EqualFold(os.Getenv("NDT_LOG_DEBUG"), "true") {
+		logging.Logger.Level = log.DebugLevel
+	}
 }
 
 // httpServer creates a new *http.Server with explicit Read and Write timeouts.
@@ -167,7 +171,6 @@ func parseDeploymentLabels() []metadata.NameValue {
 }
 
 func main() {
-	logging.Logger.Level = log.DebugLevel
 	flag.Parse()
 	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not parse env args")
 
