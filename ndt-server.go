@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"log"
+	"github.com/apex/log"
+	golog "log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,24 +36,26 @@ import (
 
 var (
 	// Flags that can be passed in on the command line
-	ndt7Addr             = flag.String("ndt7_addr", ":443", "The address and port to use for the ndt7 test")
-	ndt7AddrCleartext    = flag.String("ndt7_addr_cleartext", ":80", "The address and port to use for the ndt7 cleartext test")
-	ndt7MaxMsgSize       = flag.Int64("ndt7_max_msg_size", 16777216, "The maximum value of upload message size")
-	ndt7MaxScaledMsgSize = flag.Int64("ndt7_max_scaled_msg_size", 8388608, "The maximum value of download message size")
-	ndt5Addr             = flag.String("ndt5_addr", ":3001", "The address and port to use for the unencrypted ndt5 test")
-	ndt5WsAddr           = flag.String("ndt5_ws_addr", "127.0.0.1:3002", "The address and port to use for the ndt5 WS test")
-	ndt5WssAddr          = flag.String("ndt5_wss_addr", ":3010", "The address and port to use for the ndt5 WSS test")
-	certFile             = flag.String("cert", "", "The file with server certificates in PEM format.")
-	keyFile              = flag.String("key", "", "The file with server key in PEM format.")
-	tlsVersion           = flag.String("tls.version", "1.2", "Minimum TLS version. Valid values: 1.2 or 1.3")
-	tlsCiphers           = flag.String("tls.ciphers", "TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", "TLS ciphers list to be supported by the server. The value should be a string with comma separated values, i.e.: TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384")
-	dataDir              = flag.String("datadir", "/var/spool/ndt", "The directory in which to write data files")
-	htmlDir              = flag.String("htmldir", "html", "The directory from which to serve static web content.")
-	deploymentLabels     = flagx.KeyValue{}
-	tokenVerifyKey       = flagx.FileBytesArray{}
-	tokenRequired5       bool
-	tokenRequired7       bool
-	tokenMachine         string
+	ndt7Addr                       = flag.String("ndt7_addr", ":443", "The address and port to use for the ndt7 test")
+	ndt7AddrCleartext              = flag.String("ndt7_addr_cleartext", ":80", "The address and port to use for the ndt7 cleartext test")
+	ndt7MaxMsgSize                 = flag.Int64("ndt7_max_msg_size", 16777216, "The maximum value of upload message size")
+	ndt7MaxScaledMsgSize           = flag.Int64("ndt7_max_scaled_msg_size", 8388608, "The maximum value of download message size")
+	ndt5Addr                       = flag.String("ndt5_addr", ":3001", "The address and port to use for the unencrypted ndt5 test")
+	ndt5WsAddr                     = flag.String("ndt5_ws_addr", "127.0.0.1:3002", "The address and port to use for the ndt5 WS test")
+	ndt5WssAddr                    = flag.String("ndt5_wss_addr", ":3010", "The address and port to use for the ndt5 WSS test")
+	certFile                       = flag.String("cert", "", "The file with server certificates in PEM format.")
+	keyFile                        = flag.String("key", "", "The file with server key in PEM format.")
+	tlsVersion                     = flag.String("tls.version", "1.2", "Minimum TLS version. Valid values: 1.2 or 1.3")
+	tlsCiphers                     = flag.String("tls.ciphers", "TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", "TLS ciphers list to be supported by the server. The value should be a string with comma separated values, i.e.: TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384")
+	dataDir                        = flag.String("datadir", "/var/spool/ndt", "The directory in which to write data files")
+	htmlDir                        = flag.String("htmldir", "html", "The directory from which to serve static web content.")
+	averagePoissonSamplingInterval = flag.Int64("average_poisson_sampling_interval", 250, "The average of a lambda distribution used to decide when to perform next measurement.")
+	testNumber                     = flag.Int64("test", -1, "Testing envs")
+	deploymentLabels               = flagx.KeyValue{}
+	tokenVerifyKey                 = flagx.FileBytesArray{}
+	tokenRequired5                 bool
+	tokenRequired7                 bool
+	tokenMachine                   string
 
 	// A metric to use to signal that the server is in lame duck mode.
 	lameDuck = promauto.NewGauge(prometheus.GaugeOpts{
@@ -74,7 +78,6 @@ func init() {
 func catchSigterm() {
 	// Disable lame duck status.
 	lameDuck.Set(0)
-
 	// Register channel to receive SIGTERM events.
 	c := make(chan os.Signal, 1)
 	defer close(c)
@@ -101,7 +104,10 @@ func catchSigterm() {
 }
 
 func init() {
-	log.SetFlags(log.LUTC | log.LstdFlags | log.Lshortfile)
+	golog.SetFlags(golog.LUTC | golog.LstdFlags | golog.Lshortfile)
+	if strings.EqualFold(os.Getenv("NDT_SERVER_LOG_DEBUG"), "true") {
+		logging.Logger.Level = log.DebugLevel
+	}
 }
 
 // httpServer creates a new *http.Server with explicit Read and Write timeouts.
@@ -109,7 +115,7 @@ func httpServer(addr string, handler http.Handler) *http.Server {
 	tlsconf := &tls.Config{}
 	ciphers, err := util.ConvertCipherNamesToIdsArray(*tlsCiphers)
 	if err != nil {
-		log.Printf("error while converting configured cipher names to their IDs: %v\n", err)
+		golog.Printf("error while converting configured cipher names to their IDs: %v\n", err)
 		ciphers = nil
 	}
 	switch *tlsVersion {
@@ -225,7 +231,7 @@ func main() {
 		// forwarded clients when txcontroller is enabled.
 		logging.MakeAccessLogHandler(ndt5WsMux),
 	)
-	log.Println("About to listen for unencrypted ndt5 NDT tests on " + *ndt5WsAddr)
+	golog.Println("About to listen for unencrypted ndt5 NDT tests on " + *ndt5WsAddr)
 	rtx.Must(listener.ListenAndServeAsync(ndt5WsServer), "Could not start unencrypted ndt5 NDT server")
 	defer ndt5WsServer.Close()
 
@@ -233,12 +239,13 @@ func main() {
 	ndt7Mux := http.NewServeMux()
 	ndt7Mux.Handle("/", http.FileServer(http.Dir(*htmlDir)))
 	ndt7Handler := &handler.Handler{
-		DataDir:          *dataDir,
-		SecurePort:       *ndt7Addr,
-		InsecurePort:     *ndt7AddrCleartext,
-		ServerMetadata:   serverMetadata,
-		MaxMsgSize:       *ndt7MaxMsgSize,
-		MaxScaledMsgSize: *ndt7MaxScaledMsgSize,
+		DataDir:                        *dataDir,
+		SecurePort:                     *ndt7Addr,
+		InsecurePort:                   *ndt7AddrCleartext,
+		ServerMetadata:                 serverMetadata,
+		MaxMsgSize:                     *ndt7MaxMsgSize,
+		MaxScaledMsgSize:               *ndt7MaxScaledMsgSize,
+		AveragePoissonSamplingInterval: *averagePoissonSamplingInterval,
 	}
 	ndt7Mux.Handle(spec.DownloadURLPath, http.HandlerFunc(ndt7Handler.Download))
 	ndt7Mux.Handle(spec.UploadURLPath, http.HandlerFunc(ndt7Handler.Upload))
@@ -246,7 +253,7 @@ func main() {
 		*ndt7AddrCleartext,
 		ac7.Then(logging.MakeAccessLogHandler(ndt7Mux)),
 	)
-	log.Println("About to listen for ndt7 cleartext tests on " + *ndt7AddrCleartext)
+	golog.Println("About to listen for ndt7 cleartext tests on " + *ndt7AddrCleartext)
 	rtx.Must(listener.ListenAndServeAsync(ndt7ServerCleartext), "Could not start ndt7 cleartext server")
 	defer ndt7ServerCleartext.Close()
 
@@ -260,7 +267,7 @@ func main() {
 			*ndt5WssAddr,
 			ac5.Then(logging.MakeAccessLogHandler(ndt5WssMux)),
 		)
-		log.Println("About to listen for ndt5 WsS tests on " + *ndt5WssAddr)
+		golog.Println("About to listen for ndt5 WsS tests on " + *ndt5WssAddr)
 		rtx.Must(listener.ListenAndServeTLSAsync(ndt5WssServer, *certFile, *keyFile), "Could not start ndt5 WsS server")
 		defer ndt5WssServer.Close()
 
@@ -269,11 +276,11 @@ func main() {
 			*ndt7Addr,
 			ac7.Then(logging.MakeAccessLogHandler(ndt7Mux)),
 		)
-		log.Println("About to listen for ndt7 tests on " + *ndt7Addr)
+		golog.Println("About to listen for ndt7 tests on " + *ndt7Addr)
 		rtx.Must(listener.ListenAndServeTLSAsync(ndt7Server, *certFile, *keyFile), "Could not start ndt7 server")
 		defer ndt7Server.Close()
 	} else {
-		log.Printf("Cert=%q and Key=%q means no TLS services will be started.\n", *certFile, *keyFile)
+		golog.Printf("Cert=%q and Key=%q means no TLS services will be started.\n", *certFile, *keyFile)
 	}
 
 	// Serve until the context is canceled.

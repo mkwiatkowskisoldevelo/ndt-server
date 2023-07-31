@@ -13,7 +13,6 @@ import (
 	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/ndt-server/logging"
 	"github.com/m-lab/ndt-server/ndt7/model"
-	"github.com/m-lab/ndt-server/ndt7/spec"
 	"github.com/m-lab/ndt-server/netx"
 )
 
@@ -29,16 +28,18 @@ var (
 
 // Measurer performs measurements
 type Measurer struct {
-	conn   *websocket.Conn
-	uuid   string
-	ticker *memoryless.Ticker
+	conn                       *websocket.Conn
+	uuid                       string
+	ticker                     *memoryless.Ticker
+	avgPoissonSamplingInterval int64
 }
 
 // New creates a new measurer instance
-func New(conn *websocket.Conn, UUID string) *Measurer {
+func New(conn *websocket.Conn, UUID string, avgPoissonSamplingInterval int64) *Measurer {
 	return &Measurer{
-		conn: conn,
-		uuid: UUID,
+		conn:                       conn,
+		uuid:                       UUID,
+		avgPoissonSamplingInterval: avgPoissonSamplingInterval,
 	}
 }
 
@@ -97,9 +98,9 @@ func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- m
 	// Implementation note: the ticker will close its output channel
 	// after the controlling context is expired.
 	ticker, err := memoryless.NewTicker(measurerctx, memoryless.Config{
-		Min:      spec.MinPoissonSamplingInterval,
-		Expected: spec.AveragePoissonSamplingInterval,
-		Max:      spec.MaxPoissonSamplingInterval,
+		Min:      time.Duration(float64(m.avgPoissonSamplingInterval)*0.1) * time.Millisecond,
+		Expected: time.Duration(m.avgPoissonSamplingInterval) * time.Millisecond,
+		Max:      time.Duration(float64(m.avgPoissonSamplingInterval)*2.5) * time.Millisecond,
 	})
 	if err != nil {
 		logging.Logger.WithError(err).Warn("memoryless.NewTicker failed")

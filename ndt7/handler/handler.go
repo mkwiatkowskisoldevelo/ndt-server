@@ -43,6 +43,8 @@ type Handler struct {
 	MaxMsgSize int64
 	// The maximum value of download message size
 	MaxScaledMsgSize int64
+	//The average of a lambda distribution used to decide when to perform next measurement.
+	AveragePoissonSamplingInterval int64
 }
 
 // warnAndClose emits message as a warning and the sends a Bad Request
@@ -105,11 +107,11 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	var rate float64
 	if kind == spec.SubtestDownload {
 		result.Download = data
-		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize)
+		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize, h.AveragePoissonSamplingInterval)
 		rate = downRate(data.ServerMeasurements)
 	} else if kind == spec.SubtestUpload {
 		result.Upload = data
-		err = upload.Do(req.Context(), conn, data, h.MaxMsgSize)
+		err = upload.Do(req.Context(), conn, data, h.MaxMsgSize, h.AveragePoissonSamplingInterval)
 		rate = upRate(data.ServerMeasurements)
 	}
 
