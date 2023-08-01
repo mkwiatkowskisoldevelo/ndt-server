@@ -164,6 +164,7 @@ func vpimTestInfo(req *http.Request) model.VpimTestMetadata {
 	vpimTestMetadata.VpimTestUUID = vpimTestUUID
 	vpimTestMetadata.VpimTestThreadNumber = vpimTestThreadNumber
 	vpimTestMetadata.VpimTestThreadIndex = vpimTestThreadIndex
+	vpimTestMetadata.RemoteAddr = req.RemoteAddr
 	return vpimTestMetadata
 }
 

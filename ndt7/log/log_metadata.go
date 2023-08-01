@@ -7,5 +7,5 @@ import (
 )
 
 func LogEntryWithTestMetadata(testMetadata *model.VpimTestMetadata) *log2.Entry {
-	return logging.Logger.WithField("vpimTestUUID", testMetadata.VpimTestUUID).WithField("vpimThreadIndex", testMetadata.VpimTestThreadIndex)
+	return logging.Logger.WithField("RemoteAddr", testMetadata.RemoteAddr).WithField("vpimTestUUID", testMetadata.VpimTestUUID).WithField("vpimThreadIndex", testMetadata.VpimTestThreadIndex)
 }
