@@ -4,6 +4,7 @@ package measurer
 
 import (
 	"context"
+	"github.com/m-lab/ndt-server/ndt7/log"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -11,7 +12,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/m-lab/go/memoryless"
-	"github.com/m-lab/ndt-server/logging"
 	"github.com/m-lab/ndt-server/ndt7/model"
 	"github.com/m-lab/ndt-server/netx"
 )
@@ -32,14 +32,16 @@ type Measurer struct {
 	uuid                       string
 	ticker                     *memoryless.Ticker
 	avgPoissonSamplingInterval int64
+	testMetadata               *model.VpimTestMetadata
 }
 
 // New creates a new measurer instance
-func New(conn *websocket.Conn, UUID string, avgPoissonSamplingInterval int64) *Measurer {
+func New(conn *websocket.Conn, UUID string, avgPoissonSamplingInterval int64, testMetadata *model.VpimTestMetadata) *Measurer {
 	return &Measurer{
 		conn:                       conn,
 		uuid:                       UUID,
 		avgPoissonSamplingInterval: avgPoissonSamplingInterval,
+		testMetadata:               testMetadata,
 	}
 }
 
@@ -52,7 +54,7 @@ func (m *Measurer) getSocketAndPossiblyEnableBBR() (netx.ConnInfo, error) {
 		success = "false"
 		errstr = err.Error()
 		uuid, _ := ci.GetUUID() // to log error with uuid.
-		logging.Logger.WithError(err).Warn("Cannot enable BBR: " + uuid)
+		log.LogEntryWithTestMetadata(m.testMetadata).WithError(err).Warn("Cannot enable BBR: " + uuid)
 		// FALLTHROUGH
 	}
 	BBREnabled.WithLabelValues(success, errstr).Inc()
@@ -79,14 +81,14 @@ func measure(measurement *model.Measurement, ci netx.ConnInfo, date time.Time, e
 }
 
 func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- model.Measurement) {
-	logging.Logger.Debug("measurer: start")
-	defer logging.Logger.Debug("measurer: stop")
+	log.LogEntryWithTestMetadata(m.testMetadata).Debug("measurer: start")
+	defer log.LogEntryWithTestMetadata(m.testMetadata).Debug("measurer: stop")
 	defer close(dst)
 	measurerctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	ci, err := m.getSocketAndPossiblyEnableBBR()
 	if err != nil {
-		logging.Logger.WithError(err).Warn("getSocketAndPossiblyEnableBBR failed")
+		log.LogEntryWithTestMetadata(m.testMetadata).Warn("getSocketAndPossiblyEnableBBR failed")
 		return
 	}
 	start := time.Now()
@@ -103,7 +105,7 @@ func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- m
 		Max:      time.Duration(float64(m.avgPoissonSamplingInterval)*2.5) * time.Millisecond,
 	})
 	if err != nil {
-		logging.Logger.WithError(err).Warn("memoryless.NewTicker failed")
+		log.LogEntryWithTestMetadata(m.testMetadata).Warn("memoryless.NewTicker failed")
 		return
 	}
 	m.ticker = ticker

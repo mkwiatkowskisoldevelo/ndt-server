@@ -3,11 +3,12 @@ package results
 import (
 	"compress/gzip"
 	"encoding/json"
+	"github.com/m-lab/ndt-server/ndt7/log"
+	"github.com/m-lab/ndt-server/ndt7/model"
 	"os"
 	"path"
 	"time"
 
-	"github.com/m-lab/ndt-server/logging"
 	"github.com/m-lab/ndt-server/ndt7/spec"
 )
 
@@ -55,10 +56,10 @@ func newFile(datadir, what, uuid string) (*File, error) {
 // failure. The "datadir" argument specifies the directory on disk to write the
 // data into and the what argument should indicate whether this is a
 // spec.SubtestDownload or a spec.SubtestUpload ndt7 measurement.
-func NewFile(uuid string, datadir string, what spec.SubtestKind) (*File, error) {
+func NewFile(uuid string, datadir string, what spec.SubtestKind, testMetadata *model.VpimTestMetadata) (*File, error) {
 	fp, err := newFile(datadir, string(what), uuid)
 	if err != nil {
-		logging.Logger.WithError(err).Warn("newFile failed")
+		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("newFile failed")
 		return nil, err
 	}
 	return fp, nil
