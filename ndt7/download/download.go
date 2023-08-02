@@ -5,6 +5,7 @@ import (
 	"context"
 	"github.com/gorilla/websocket"
 	"github.com/m-lab/ndt-server/ndt7/download/sender"
+	"github.com/m-lab/ndt-server/ndt7/log"
 	"github.com/m-lab/ndt-server/ndt7/model"
 	"github.com/m-lab/ndt-server/ndt7/receiver"
 )
@@ -18,7 +19,8 @@ func Do(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, Max
 	// bounded. After timeout, the sender closes the conn, which results in the
 	// receiver completing.
 	WaitForMessage(ctx, conn, MaxScaledMessageSize, testMetadata)
-
+	log.LogEntryWithTestMetadata(testMetadata).Debug("Starting download test")
+	defer log.LogEntryWithTestMetadata(testMetadata).Debug("Finished download test")
 	// Receive and save client-provided measurements in data.
 	recv := receiver.StartDownloadReceiverAsync(ctx, conn, data, testMetadata)
 
