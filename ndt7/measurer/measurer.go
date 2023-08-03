@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/m-lab/ndt-server/ndt7/log"
+	"github.com/m-lab/ndt-server/ndt7/spec"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -34,15 +35,17 @@ type Measurer struct {
 	ticker                     *memoryless.Ticker
 	avgPoissonSamplingInterval int64
 	testMetadata               *model.VpimTestMetadata
+	subtestKind                *spec.SubtestKind
 }
 
 // New creates a new measurer instance
-func New(conn *websocket.Conn, UUID string, avgPoissonSamplingInterval int64, testMetadata *model.VpimTestMetadata) *Measurer {
+func New(conn *websocket.Conn, UUID string, avgPoissonSamplingInterval int64, testMetadata *model.VpimTestMetadata, subtestKind spec.SubtestKind) *Measurer {
 	return &Measurer{
 		conn:                       conn,
 		uuid:                       UUID,
 		avgPoissonSamplingInterval: avgPoissonSamplingInterval,
 		testMetadata:               testMetadata,
+		subtestKind:                &subtestKind,
 	}
 }
 
@@ -84,14 +87,14 @@ func (m *Measurer) measure(measurement *model.Measurement, ci netx.ConnInfo, dat
 }
 
 func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- model.Measurement) {
-	log.LogEntryWithTestMetadata(m.testMetadata).Debug("measurer: start")
-	defer log.LogEntryWithTestMetadata(m.testMetadata).Debug("measurer: stop")
+	log.LogEntryWithTestMetadataAndSubtestKind(m.testMetadata, *m.subtestKind).Debug("measurer: start")
+	defer log.LogEntryWithTestMetadataAndSubtestKind(m.testMetadata, *m.subtestKind).Debug("measurer: stop")
 	defer close(dst)
 	measurerctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	ci, err := m.getSocketAndPossiblyEnableBBR()
 	if err != nil {
-		log.LogEntryWithTestMetadata(m.testMetadata).Warn("getSocketAndPossiblyEnableBBR failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(m.testMetadata, *m.subtestKind).Warn("getSocketAndPossiblyEnableBBR failed")
 		return
 	}
 	start := time.Now()
@@ -108,7 +111,7 @@ func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- m
 		Max:      time.Duration(float64(m.avgPoissonSamplingInterval)*2.5) * time.Millisecond,
 	})
 	if err != nil {
-		log.LogEntryWithTestMetadata(m.testMetadata).Warn("memoryless.NewTicker failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(m.testMetadata, *m.subtestKind).Warn("memoryless.NewTicker failed")
 		return
 	}
 	m.ticker = ticker
@@ -117,7 +120,7 @@ func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- m
 		m.measure(&measurement, ci, now, now.Sub(start))
 		measurement.ConnectionInfo = connectionInfo
 		measurementJson, _ := json.Marshal(measurement)
-		log.LogEntryWithTestMetadata(m.testMetadata).Debug("measurement: " + string(measurementJson))
+		log.LogEntryWithTestMetadataAndSubtestKind(m.testMetadata, *m.subtestKind).Debug("measurement: " + string(measurementJson))
 		dst <- measurement // Liveness: this is blocking
 	}
 }
@@ -129,6 +132,7 @@ func (m *Measurer) loop(ctx context.Context, timeout time.Duration, dst chan<- m
 // the given timeout, provided that the consumer continues reading from the
 // returned channel. Measurer may be stopped early by canceling ctx, or by
 // calling Stop.
+// kind is only used for debug logging purposes
 func (m *Measurer) Start(ctx context.Context, timeout time.Duration) <-chan model.Measurement {
 	dst := make(chan model.Measurement)
 	go m.loop(ctx, timeout, dst)

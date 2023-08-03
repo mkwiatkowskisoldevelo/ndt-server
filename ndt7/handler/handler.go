@@ -110,10 +110,12 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 		result.Download = data
 		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize, h.AveragePoissonSamplingInterval, &vpimTestMetadata)
 		rate = downRate(data.ServerMeasurements)
+		log.LogEntryWithTestMetadataAndSubtestKind(&vpimTestMetadata, kind).Debug("handler: Download rate " + fmt.Sprintf("%f Mbps", rate))
 	} else if kind == spec.SubtestUpload {
 		result.Upload = data
 		err = upload.Do(req.Context(), conn, data, h.MaxMsgSize, h.AveragePoissonSamplingInterval, &vpimTestMetadata)
 		rate = upRate(data.ServerMeasurements)
+		log.LogEntryWithTestMetadataAndSubtestKind(&vpimTestMetadata, kind).Debug("handler: Upload rate " + fmt.Sprintf("%f Mbps", rate))
 	}
 
 	proto := ndt7metrics.ConnLabel(conn)
@@ -222,13 +224,14 @@ func setupResult(conn *websocket.Conn, testMetadata *model.VpimTestMetadata) *da
 }
 
 func (h Handler) writeResult(uuid string, kind spec.SubtestKind, result *data.NDT7Result, testMetadata *model.VpimTestMetadata) {
+	log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, kind).Debug("handler: Saving result to file")
 	fp, err := results.NewFile(uuid, h.DataDir, kind, testMetadata)
 	if err != nil {
-		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("results.NewFile failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, kind).WithError(err).Warn("results.NewFile failed")
 		return
 	}
 	if err := fp.WriteResult(result); err != nil {
-		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("failed to write result")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, kind).WithError(err).Warn("failed to write result")
 	}
 	warnonerror.Close(fp, string(kind)+": ignoring fp.Close error")
 }

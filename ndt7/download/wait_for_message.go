@@ -14,8 +14,8 @@ import (
 
 // This function suppose to wait for a message from the client side.
 func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64, testMetadata *model.VpimTestMetadata) {
-	log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: start")
-	defer log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: stop")
+	log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Debug("wait_for_message: start")
+	defer log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Debug("wait_for_message: stop")
 	conn.SetReadLimit(MaxMsgSize)
 
 	receiverctx, cancel := context.WithTimeout(ctx, spec.MaxRuntime)
@@ -29,13 +29,13 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64,
 				continue
 			}
 			if mtype != websocket.TextMessage {
-				log.LogEntryWithTestMetadata(testMetadata).Warn("wait_for_message: got non-Text message")
+				log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Warn("wait_for_message: got non-Text message")
 				continue
 			}
 
 			mdata, err := ioutil.ReadAll(r)
 			if err != nil {
-				log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("wait_for_message: reading TextMessage failed")
+				log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).WithError(err).Warn("wait_for_message: reading TextMessage failed")
 				continue
 			}
 
@@ -46,7 +46,7 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64,
 				log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read ready message, sending response")
 				msg := []byte("ready_response")
 				if err = conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-					log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("wait_for_message: sending ready_response failed")
+					log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Warn("wait_for_message: sending ready_response failed")
 					return
 				}
 				continue
@@ -62,8 +62,8 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64,
 
 	select {
 	case res := <-currentChannel:
-		log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: " + res)
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Debug("wait_for_message: " + res)
 	case <-time.After(spec.WaitForMessageTimeout):
-		log.LogEntryWithTestMetadata(testMetadata).Warn("wait_for_message: waiting for message timed out")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Warn("wait_for_message: waiting for message timed out")
 	}
 }

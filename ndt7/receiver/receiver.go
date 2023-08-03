@@ -26,17 +26,17 @@ const (
 
 func start(
 	ctx context.Context, conn *websocket.Conn, kind receiverKind,
-	data *model.ArchivalData, MaxMsgSize int64, testMetadata *model.VpimTestMetadata,
+	data *model.ArchivalData, MaxMsgSize int64, testMetadata *model.VpimTestMetadata, subtestKind spec.SubtestKind,
 ) {
-	log.LogEntryWithTestMetadata(testMetadata).Debug("receiver: start")
+	log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).Debug("receiver: start")
 	proto := ndt7metrics.ConnLabel(conn)
-	defer log.LogEntryWithTestMetadata(testMetadata).Debug("receiver: stop")
+	defer log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).Debug("receiver: stop")
 	conn.SetReadLimit(MaxMsgSize)
 	receiverctx, cancel := context.WithTimeout(ctx, spec.MaxRuntime)
 	defer cancel()
 	err := conn.SetReadDeadline(time.Now().Add(spec.MaxRuntime)) // Liveness!
 	if err != nil {
-		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("receiver: conn.SetReadDeadline failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: conn.SetReadDeadline failed")
 		ndt7metrics.ClientReceiverErrors.WithLabelValues(
 			proto, fmt.Sprint(kind), "set-read-deadline").Inc()
 		return
@@ -62,7 +62,7 @@ func start(
 		if mtype != websocket.TextMessage {
 			switch kind {
 			case downloadReceiver:
-				log.LogEntryWithTestMetadata(testMetadata).Warn("receiver: got non-Text message")
+				log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).Warn("receiver: got non-Text message")
 				ndt7metrics.ClientReceiverErrors.WithLabelValues(
 					proto, fmt.Sprint(kind), "wrong-message-type").Inc()
 				return // Unexpected message type
@@ -81,7 +81,7 @@ func start(
 		var measurement model.Measurement
 		err = json.Unmarshal(mdata, &measurement)
 		if err != nil {
-			log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("receiver: json.Unmarshal failed")
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: json.Unmarshal failed")
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "unmarshal-client-message").Inc()
 			return
@@ -104,7 +104,7 @@ func start(
 func StartDownloadReceiverAsync(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, testMetadata *model.VpimTestMetadata) context.Context {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	go func() {
-		start(ctx2, conn, downloadReceiver, data, spec.MaxMessageSize, testMetadata)
+		start(ctx2, conn, downloadReceiver, data, spec.MaxMessageSize, testMetadata, spec.SubtestDownload)
 		cancel2()
 	}()
 	return ctx2
@@ -116,7 +116,7 @@ func StartDownloadReceiverAsync(ctx context.Context, conn *websocket.Conn, data 
 func StartUploadReceiverAsync(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, MaxMsgSize int64, testMetadata *model.VpimTestMetadata) context.Context {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	go func() {
-		start(ctx2, conn, uploadReceiver, data, MaxMsgSize, testMetadata)
+		start(ctx2, conn, uploadReceiver, data, MaxMsgSize, testMetadata, spec.SubtestUpload)
 		cancel2()
 	}()
 	return ctx2
