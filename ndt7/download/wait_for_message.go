@@ -17,7 +17,7 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64)
 	defer logging.Logger.Debug("wait_for_message: stop")
 	conn.SetReadLimit(MaxMsgSize)
 
-	receiverctx, cancel := context.WithTimeout(ctx, spec.MaxRuntime)
+	receiverctx, cancel := context.WithTimeout(ctx, spec.WaitForMessageTimeout)
 	defer cancel()
 
 	currentChannel := make(chan string, 1)
