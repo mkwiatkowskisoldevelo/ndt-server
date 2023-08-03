@@ -22,48 +22,40 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64,
 	defer cancel()
 
 	currentChannel := make(chan string, 1)
-	quit := make(chan bool)
-
 	go func() {
 		for receiverctx.Err() == nil { // Liveness!
 			mtype, r, err := conn.NextReader()
-			select {
-			case <-quit:
-				return
-			default:
-				if err != nil {
-					continue
-				}
+			if err != nil {
+				continue
+			}
+			if mtype != websocket.TextMessage {
+				log.LogEntryWithTestMetadata(testMetadata).Warn("wait_for_message: got non-Text message")
+				continue
+			}
 
-				if mtype != websocket.TextMessage {
-					log.LogEntryWithTestMetadata(testMetadata).Warn("wait_for_message: got non-Text message")
-					continue
-				}
+			mdata, err := ioutil.ReadAll(r)
+			if err != nil {
+				log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("wait_for_message: reading TextMessage failed")
+				continue
+			}
 
-				mdata, err := ioutil.ReadAll(r)
-				if err != nil {
-					log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("wait_for_message: reading TextMessage failed")
-					continue
-				}
+			str := string(mdata[:])
+			log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read message: " + str)
 
-				str := string(mdata[:])
-				log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read message: " + str)
-
-				if str != "" && str == "ready" {
-					log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read ready message, sending response")
-					msg := []byte("ready_response")
-					if err = conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-						log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("wait_for_message: sending ready_response failed")
-						return
-					}
-					continue
-				}
-
-				if str != "" && str == "start" {
-					log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read start message")
-					currentChannel <- "wait_for_message: finished waiting for messages"
+			if str != "" && str == "ready" {
+				log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read ready message, sending response")
+				msg := []byte("ready_response")
+				if err = conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+					log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("wait_for_message: sending ready_response failed")
 					return
 				}
+				continue
+			}
+
+			if str != "" && str == "start" {
+				log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: read start message")
+				currentChannel <- "wait_for_message: finished waiting for messages"
+				return
 			}
 		}
 	}()
@@ -73,7 +65,5 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64,
 		log.LogEntryWithTestMetadata(testMetadata).Debug("wait_for_message: " + res)
 	case <-time.After(spec.WaitForMessageTimeout):
 		log.LogEntryWithTestMetadata(testMetadata).Warn("wait_for_message: waiting for message timed out")
-		quit <- true
 	}
-
 }

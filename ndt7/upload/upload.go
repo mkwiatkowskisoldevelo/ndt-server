@@ -18,8 +18,8 @@ func Do(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, Max
 	// Implementation note: use child contexts so the sender is strictly time
 	// bounded. After timeout, the sender closes the conn, which results in the
 	// receiver completing.
-	log.LogEntryWithTestMetadata(testMetadata).Debug("Starting download test")
-	defer log.LogEntryWithTestMetadata(testMetadata).Debug("Finished download test")
+	log.LogEntryWithTestMetadata(testMetadata).Debug("Starting upload test")
+	defer log.LogEntryWithTestMetadata(testMetadata).Debug("Finished upload test")
 	// Receive and save client-provided measurements in data.
 	recv := receiver.StartUploadReceiverAsync(ctx, conn, data, MaxMsgSize, testMetadata)
 
