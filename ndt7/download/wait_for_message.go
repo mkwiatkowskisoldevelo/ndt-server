@@ -23,6 +23,13 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64)
 	currentChannel := make(chan string, 1)
 
 	go func() {
+
+		defer func() {
+			if err := recover(); err != nil {
+				logging.Logger.Warn("wait_for_message: panic occurred")
+			}
+		}()
+
 		for receiverctx.Err() == nil { // Liveness!
 			mtype, r, err := conn.NextReader()
 			if err != nil {
