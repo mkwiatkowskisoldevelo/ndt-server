@@ -43,8 +43,8 @@ func start(
 	}
 	conn.SetPongHandler(func(s string) error {
 		_, err := ping.ParseTicks(s)
-		if err == nil {
-		} else {
+		if err != nil {
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: pong handler error")
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "ping-parse-ticks").Inc()
 		}
@@ -57,6 +57,7 @@ func start(
 		if err != nil {
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "read-message-type").Inc()
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: reader message error")
 			return
 		}
 		if mtype != websocket.TextMessage {
@@ -76,6 +77,7 @@ func start(
 		if err != nil {
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "read-message").Inc()
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: read all error")
 			return
 		}
 		var measurement model.Measurement

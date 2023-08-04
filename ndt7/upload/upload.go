@@ -26,6 +26,9 @@ func Do(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, Max
 	// Perform upload and save server-measurements in data.
 	// TODO: move sender.Start logic to this file.
 	err := sender.Start(ctx, conn, data, AveragePoissonSamplingInterval, testMetadata)
+	if err != nil {
+		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Error("upload: error executing upload test")
+	}
 
 	// Block on the receiver completing to guarantee that access to data is synchronous.
 	<-recv.Done()

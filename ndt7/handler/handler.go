@@ -110,12 +110,10 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 		result.Download = data
 		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize, h.AveragePoissonSamplingInterval, &vpimTestMetadata)
 		rate = downRate(data.ServerMeasurements)
-		log.LogEntryWithTestMetadataAndSubtestKind(&vpimTestMetadata, kind).Debug("handler: Download rate " + fmt.Sprintf("%f Mbps", rate))
 	} else if kind == spec.SubtestUpload {
 		result.Upload = data
 		err = upload.Do(req.Context(), conn, data, h.MaxMsgSize, h.AveragePoissonSamplingInterval, &vpimTestMetadata)
 		rate = upRate(data.ServerMeasurements)
-		log.LogEntryWithTestMetadataAndSubtestKind(&vpimTestMetadata, kind).Debug("handler: Upload rate " + fmt.Sprintf("%f Mbps", rate))
 	}
 
 	proto := ndt7metrics.ConnLabel(conn)
@@ -177,6 +175,7 @@ func setupConn(writer http.ResponseWriter, request *http.Request, testMetadata *
 	if request.Header.Get("Sec-WebSocket-Protocol") != spec.SecWebSocketProtocol {
 		warnAndClose(
 			writer, "setupConn: missing Sec-WebSocket-Protocol in request")
+		log.LogEntryWithTestMetadata(testMetadata).Error("setupConn: missing Sec-WebSocket-Protocol in request")
 		return nil
 	}
 	headers := http.Header{}
@@ -190,10 +189,10 @@ func setupConn(writer http.ResponseWriter, request *http.Request, testMetadata *
 	}
 	conn, err := upgrader.Upgrade(writer, request, headers)
 	if err != nil {
+		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Error("setupConn: opening results file")
 		return nil
 	}
 	log.LogEntryWithTestMetadata(testMetadata).Debug("setupConn: opening results file")
-
 	return conn
 }
 

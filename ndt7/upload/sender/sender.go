@@ -21,20 +21,20 @@ import (
 // MaxRuntime of the subtest. This is enforced by setting the write deadline to
 // Time.Now() + MaxRuntime.
 func Start(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, AveragePoissonSamplingInterval int64, testMetadata *model.VpimTestMetadata) error {
-	log.LogEntryWithTestMetadata(testMetadata).Debug("sender: start")
+	log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestUpload).Debug("sender: start")
 	proto := ndt7metrics.ConnLabel(conn)
 
 	// Start collecting connection measurements. Measurements will be sent to
 	// src until DefaultRuntime, when the src channel is closed.
 	mr := measurer.New(conn, data.UUID, AveragePoissonSamplingInterval, testMetadata, spec.SubtestUpload)
 	src := mr.Start(ctx, spec.DefaultRuntime)
-	defer log.LogEntryWithTestMetadata(testMetadata).Debug("sender: stop")
+	defer log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestUpload).Debug("sender: stop")
 	defer mr.Stop(src)
 
 	deadline := time.Now().Add(spec.MaxRuntime)
 	err := conn.SetWriteDeadline(deadline) // Liveness!
 	if err != nil {
-		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("sender: conn.SetWriteDeadline failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestUpload).WithError(err).Error("sender: conn.SetWriteDeadline failed")
 		ndt7metrics.ClientSenderErrors.WithLabelValues(
 			proto, string(spec.SubtestUpload), "set-write-deadline").Inc()
 		return err
@@ -51,10 +51,11 @@ func Start(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, 
 			closer.StartClosing(conn, testMetadata)
 			ndt7metrics.ClientSenderErrors.WithLabelValues(
 				proto, string(spec.SubtestUpload), "measurer-closed").Inc()
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestUpload).WithError(err).Warn("sender: measurer-closed")
 			return nil
 		}
 		if err := conn.WriteJSON(m); err != nil {
-			log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("sender: conn.WriteJSON failed")
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestUpload).WithError(err).Warn("sender: conn.WriteJSON failed")
 			ndt7metrics.ClientSenderErrors.WithLabelValues(
 				proto, string(spec.SubtestUpload), "write-json").Inc()
 			return err
@@ -62,7 +63,7 @@ func Start(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, 
 		// Only save measurements sent to the client.
 		data.ServerMeasurements = append(data.ServerMeasurements, m)
 		if err := ping.SendTicks(conn, deadline); err != nil {
-			log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("sender: ping.SendTicks failed")
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestUpload).WithError(err).Warn("sender: ping.SendTicks failed")
 			ndt7metrics.ClientSenderErrors.WithLabelValues(
 				proto, string(spec.SubtestUpload), "ping-send-ticks").Inc()
 			return err
