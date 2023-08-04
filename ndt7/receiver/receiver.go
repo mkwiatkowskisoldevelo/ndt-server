@@ -6,11 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/m-lab/ndt-server/ndt7/log"
 	"io/ioutil"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/m-lab/ndt-server/logging"
 	ndt7metrics "github.com/m-lab/ndt-server/ndt7/metrics"
 	"github.com/m-lab/ndt-server/ndt7/model"
 	"github.com/m-lab/ndt-server/ndt7/ping"
@@ -26,27 +26,25 @@ const (
 
 func start(
 	ctx context.Context, conn *websocket.Conn, kind receiverKind,
-	data *model.ArchivalData, MaxMsgSize int64,
+	data *model.ArchivalData, MaxMsgSize int64, testMetadata *model.VpimTestMetadata, subtestKind spec.SubtestKind,
 ) {
-	logging.Logger.Debug("receiver: start")
+	log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).Debug("receiver: start")
 	proto := ndt7metrics.ConnLabel(conn)
-	defer logging.Logger.Debug("receiver: stop")
+	defer log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).Debug("receiver: stop")
 	conn.SetReadLimit(MaxMsgSize)
 	receiverctx, cancel := context.WithTimeout(ctx, spec.MaxRuntime)
 	defer cancel()
 	err := conn.SetReadDeadline(time.Now().Add(spec.MaxRuntime)) // Liveness!
 	if err != nil {
-		logging.Logger.WithError(err).Warn("receiver: conn.SetReadDeadline failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: conn.SetReadDeadline failed")
 		ndt7metrics.ClientReceiverErrors.WithLabelValues(
 			proto, fmt.Sprint(kind), "set-read-deadline").Inc()
 		return
 	}
 	conn.SetPongHandler(func(s string) error {
-		rtt, err := ping.ParseTicks(s)
-		if err == nil {
-			rtt /= int64(time.Millisecond)
-			logging.Logger.Debugf("receiver: ApplicationLevel RTT: %d ms", rtt)
-		} else {
+		_, err := ping.ParseTicks(s)
+		if err != nil {
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: pong handler error")
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "ping-parse-ticks").Inc()
 		}
@@ -59,12 +57,13 @@ func start(
 		if err != nil {
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "read-message-type").Inc()
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: reader message error")
 			return
 		}
 		if mtype != websocket.TextMessage {
 			switch kind {
 			case downloadReceiver:
-				logging.Logger.Warn("receiver: got non-Text message")
+				log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).Warn("receiver: got non-Text message")
 				ndt7metrics.ClientReceiverErrors.WithLabelValues(
 					proto, fmt.Sprint(kind), "wrong-message-type").Inc()
 				return // Unexpected message type
@@ -78,12 +77,13 @@ func start(
 		if err != nil {
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "read-message").Inc()
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: read all error")
 			return
 		}
 		var measurement model.Measurement
 		err = json.Unmarshal(mdata, &measurement)
 		if err != nil {
-			logging.Logger.WithError(err).Warn("receiver: json.Unmarshal failed")
+			log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, subtestKind).WithError(err).Warn("receiver: json.Unmarshal failed")
 			ndt7metrics.ClientReceiverErrors.WithLabelValues(
 				proto, fmt.Sprint(kind), "unmarshal-client-message").Inc()
 			return
@@ -103,10 +103,10 @@ func start(
 //
 // Liveness guarantee: the goroutine will always terminate after a MaxRuntime
 // timeout.
-func StartDownloadReceiverAsync(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData) context.Context {
+func StartDownloadReceiverAsync(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, testMetadata *model.VpimTestMetadata) context.Context {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	go func() {
-		start(ctx2, conn, downloadReceiver, data, spec.MaxMessageSize)
+		start(ctx2, conn, downloadReceiver, data, spec.MaxMessageSize, testMetadata, spec.SubtestDownload)
 		cancel2()
 	}()
 	return ctx2
@@ -115,10 +115,10 @@ func StartDownloadReceiverAsync(ctx context.Context, conn *websocket.Conn, data 
 // StartUploadReceiverAsync is like StartDownloadReceiverAsync except that it
 // tolerates incoming binary messages, sent by "upload" measurement clients to
 // create network load, and therefore must be allowed.
-func StartUploadReceiverAsync(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, MaxMsgSize int64) context.Context {
+func StartUploadReceiverAsync(ctx context.Context, conn *websocket.Conn, data *model.ArchivalData, MaxMsgSize int64, testMetadata *model.VpimTestMetadata) context.Context {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	go func() {
-		start(ctx2, conn, uploadReceiver, data, MaxMsgSize)
+		start(ctx2, conn, uploadReceiver, data, MaxMsgSize, testMetadata, spec.SubtestUpload)
 		cancel2()
 	}()
 	return ctx2

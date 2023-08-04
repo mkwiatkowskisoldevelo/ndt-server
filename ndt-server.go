@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/apex/log"
-	golog "log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -104,7 +103,6 @@ func catchSigterm() {
 }
 
 func init() {
-	golog.SetFlags(golog.LUTC | golog.LstdFlags | golog.Lshortfile)
 	if strings.EqualFold(os.Getenv("NDT_SERVER_LOG_DEBUG"), "true") {
 		logging.Logger.Level = log.DebugLevel
 	}
@@ -115,7 +113,7 @@ func httpServer(addr string, handler http.Handler) *http.Server {
 	tlsconf := &tls.Config{}
 	ciphers, err := util.ConvertCipherNamesToIdsArray(*tlsCiphers)
 	if err != nil {
-		golog.Printf("error while converting configured cipher names to their IDs: %v\n", err)
+		logging.Logger.WithError(err).Error("error while converting configured cipher names to their IDs")
 		ciphers = nil
 	}
 	switch *tlsVersion {
@@ -231,7 +229,7 @@ func main() {
 		// forwarded clients when txcontroller is enabled.
 		logging.MakeAccessLogHandler(ndt5WsMux),
 	)
-	golog.Println("About to listen for unencrypted ndt5 NDT tests on " + *ndt5WsAddr)
+	logging.Logger.Info("About to listen for unencrypted ndt5 NDT tests on " + *ndt5WsAddr)
 	rtx.Must(listener.ListenAndServeAsync(ndt5WsServer), "Could not start unencrypted ndt5 NDT server")
 	defer ndt5WsServer.Close()
 
@@ -253,7 +251,7 @@ func main() {
 		*ndt7AddrCleartext,
 		ac7.Then(logging.MakeAccessLogHandler(ndt7Mux)),
 	)
-	golog.Println("About to listen for ndt7 cleartext tests on " + *ndt7AddrCleartext)
+	logging.Logger.Info("About to listen for ndt7 cleartext tests on " + *ndt7AddrCleartext)
 	rtx.Must(listener.ListenAndServeAsync(ndt7ServerCleartext), "Could not start ndt7 cleartext server")
 	defer ndt7ServerCleartext.Close()
 
@@ -267,7 +265,7 @@ func main() {
 			*ndt5WssAddr,
 			ac5.Then(logging.MakeAccessLogHandler(ndt5WssMux)),
 		)
-		golog.Println("About to listen for ndt5 WsS tests on " + *ndt5WssAddr)
+		logging.Logger.Info("About to listen for ndt5 WsS tests on " + *ndt5WssAddr)
 		rtx.Must(listener.ListenAndServeTLSAsync(ndt5WssServer, *certFile, *keyFile), "Could not start ndt5 WsS server")
 		defer ndt5WssServer.Close()
 
@@ -276,11 +274,11 @@ func main() {
 			*ndt7Addr,
 			ac7.Then(logging.MakeAccessLogHandler(ndt7Mux)),
 		)
-		golog.Println("About to listen for ndt7 tests on " + *ndt7Addr)
+		logging.Logger.Info("About to listen for ndt7 tests on " + *ndt7Addr)
 		rtx.Must(listener.ListenAndServeTLSAsync(ndt7Server, *certFile, *keyFile), "Could not start ndt7 server")
 		defer ndt7Server.Close()
 	} else {
-		golog.Printf("Cert=%q and Key=%q means no TLS services will be started.\n", *certFile, *keyFile)
+		logging.Logger.Infof("Cert=%q and Key=%q means no TLS services will be started.\n", *certFile, *keyFile)
 	}
 
 	// Serve until the context is canceled.

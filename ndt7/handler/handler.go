@@ -3,6 +3,7 @@ package handler
 
 import (
 	"fmt"
+	"github.com/m-lab/ndt-server/ndt7/log"
 	"net"
 	"net/http"
 	"net/url"
@@ -68,8 +69,11 @@ func (h Handler) Upload(rw http.ResponseWriter, req *http.Request) {
 // runMeasurement conditionally runs either download or upload based on kind.
 // The kind argument must be spec.SubtestDownload or spec.SubtestUpload.
 func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, req *http.Request) {
+	//Retrieves test info from request params
+	vpimTestMetadata := vpimTestInfo(req)
+
 	// Setup websocket connection.
-	conn := setupConn(rw, req)
+	conn := setupConn(rw, req, &vpimTestMetadata)
 	if conn == nil {
 		// TODO: test failure.
 		ndt7metrics.ClientConnections.WithLabelValues(string(kind), "websocket-error").Inc()
@@ -77,7 +81,7 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	}
 	defer warnonerror.Close(conn, "runMeasurement: ignoring conn.Close result")
 	// Create measurement archival data.
-	data, err := getData(conn)
+	data, err := getData(conn, &vpimTestMetadata)
 	if err != nil {
 		// TODO: test failure.
 		ndt7metrics.ClientConnections.WithLabelValues(string(kind), "uuid-error").Inc()
@@ -90,28 +94,25 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 	appendClientMetadata(data, req.URL.Query())
 	data.ServerMetadata = h.ServerMetadata
 
-	//retrieves test info from request params
-	vpimTestUUID, vpimTestThreadNumber, vpimTestThreadIndex := vpimTestInfo(req)
-
 	// Create ultimate result.
-	result := setupResult(conn, vpimTestUUID, vpimTestThreadNumber, vpimTestThreadIndex)
+	result := setupResult(conn, &vpimTestMetadata)
 	result.StartTime = time.Now().UTC()
 
 	// Guarantee results are written even if function panics.
 	defer func() {
 		result.EndTime = time.Now().UTC()
-		h.writeResult(data.UUID, kind, result)
+		h.writeResult(data.UUID, kind, result, &vpimTestMetadata)
 	}()
 
 	// Run measurement.
 	var rate float64
 	if kind == spec.SubtestDownload {
 		result.Download = data
-		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize, h.AveragePoissonSamplingInterval)
+		err = download.Do(req.Context(), conn, data, h.MaxScaledMsgSize, h.AveragePoissonSamplingInterval, &vpimTestMetadata)
 		rate = downRate(data.ServerMeasurements)
 	} else if kind == spec.SubtestUpload {
 		result.Upload = data
-		err = upload.Do(req.Context(), conn, data, h.MaxMsgSize, h.AveragePoissonSamplingInterval)
+		err = upload.Do(req.Context(), conn, data, h.MaxMsgSize, h.AveragePoissonSamplingInterval, &vpimTestMetadata)
 		rate = upRate(data.ServerMeasurements)
 	}
 
@@ -126,7 +127,8 @@ func (h Handler) runMeasurement(kind spec.SubtestKind, rw http.ResponseWriter, r
 }
 
 // Retrieves vPIM related info from request. Currently, there are variables associated with multithreaded testing that are passed as query parameters.
-func vpimTestInfo(req *http.Request) (string, int, int) {
+func vpimTestInfo(req *http.Request) model.VpimTestMetadata {
+	var vpimTestMetadata model.VpimTestMetadata
 	vpimTestUUID := req.URL.Query().Get("vpimTestUUID")
 
 	if vpimTestUUID == "" {
@@ -159,16 +161,21 @@ func vpimTestInfo(req *http.Request) (string, int, int) {
 		}
 	}
 
-	return vpimTestUUID, vpimTestThreadNumber, vpimTestThreadIndex
+	vpimTestMetadata.VpimTestUUID = vpimTestUUID
+	vpimTestMetadata.VpimTestThreadNumber = vpimTestThreadNumber
+	vpimTestMetadata.VpimTestThreadIndex = vpimTestThreadIndex
+	vpimTestMetadata.RemoteAddr = req.RemoteAddr
+	return vpimTestMetadata
 }
 
 // setupConn negotiates a websocket connection. The writer argument is the HTTP
 // response writer. The request argument is the HTTP request that we received.
-func setupConn(writer http.ResponseWriter, request *http.Request) *websocket.Conn {
-	logging.Logger.Debug("setupConn: upgrading to WebSockets")
+func setupConn(writer http.ResponseWriter, request *http.Request, testMetadata *model.VpimTestMetadata) *websocket.Conn {
+	log.LogEntryWithTestMetadata(testMetadata).Debug("setupConn: upgrading to WebSockets")
 	if request.Header.Get("Sec-WebSocket-Protocol") != spec.SecWebSocketProtocol {
 		warnAndClose(
 			writer, "setupConn: missing Sec-WebSocket-Protocol in request")
+		log.LogEntryWithTestMetadata(testMetadata).Error("setupConn: missing Sec-WebSocket-Protocol in request")
 		return nil
 	}
 	headers := http.Header{}
@@ -182,15 +189,15 @@ func setupConn(writer http.ResponseWriter, request *http.Request) *websocket.Con
 	}
 	conn, err := upgrader.Upgrade(writer, request, headers)
 	if err != nil {
+		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Error("setupConn: opening results file")
 		return nil
 	}
-	logging.Logger.Debug("setupConn: opening results file")
-
+	log.LogEntryWithTestMetadata(testMetadata).Debug("setupConn: opening results file")
 	return conn
 }
 
 // setupResult creates an NDT7Result from the given conn.
-func setupResult(conn *websocket.Conn, vpimTestUUID string, vpimTestThreadNumber int, vpimTestThreadIndex int) *data.NDT7Result {
+func setupResult(conn *websocket.Conn, testMetadata *model.VpimTestMetadata) *data.NDT7Result {
 	// NOTE: unless we plan to run the NDT server over different protocols than TCP,
 	// then we expect RemoteAddr and LocalAddr to always return net.TCPAddr types.
 	clientAddr := netx.ToTCPAddr(conn.RemoteAddr())
@@ -208,30 +215,31 @@ func setupResult(conn *websocket.Conn, vpimTestUUID string, vpimTestThreadNumber
 		ClientPort:           clientAddr.Port,
 		ServerIP:             serverAddr.IP.String(),
 		ServerPort:           serverAddr.Port,
-		VpimTestUUID:         vpimTestUUID,
-		VpimTestThreadNumber: vpimTestThreadNumber,
-		VpimTestThreadIndex:  vpimTestThreadIndex,
+		VpimTestUUID:         testMetadata.VpimTestUUID,
+		VpimTestThreadNumber: testMetadata.VpimTestThreadNumber,
+		VpimTestThreadIndex:  testMetadata.VpimTestThreadIndex,
 	}
 	return result
 }
 
-func (h Handler) writeResult(uuid string, kind spec.SubtestKind, result *data.NDT7Result) {
-	fp, err := results.NewFile(uuid, h.DataDir, kind)
+func (h Handler) writeResult(uuid string, kind spec.SubtestKind, result *data.NDT7Result, testMetadata *model.VpimTestMetadata) {
+	log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, kind).Debug("handler: Saving result to file")
+	fp, err := results.NewFile(uuid, h.DataDir, kind, testMetadata)
 	if err != nil {
-		logging.Logger.WithError(err).Warn("results.NewFile failed")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, kind).WithError(err).Warn("results.NewFile failed")
 		return
 	}
 	if err := fp.WriteResult(result); err != nil {
-		logging.Logger.WithError(err).Warn("failed to write result")
+		log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, kind).WithError(err).Warn("failed to write result")
 	}
 	warnonerror.Close(fp, string(kind)+": ignoring fp.Close error")
 }
 
-func getData(conn *websocket.Conn) (*model.ArchivalData, error) {
+func getData(conn *websocket.Conn, testMetadata *model.VpimTestMetadata) (*model.ArchivalData, error) {
 	ci := netx.ToConnInfo(conn.UnderlyingConn())
 	uuid, err := ci.GetUUID()
 	if err != nil {
-		logging.Logger.WithError(err).Warn("conninfo.GetUUID failed")
+		log.LogEntryWithTestMetadata(testMetadata).WithError(err).Warn("conninfo.GetUUID failed")
 		return nil, err
 	}
 	data := &model.ArchivalData{
