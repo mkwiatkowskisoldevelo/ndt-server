@@ -26,7 +26,7 @@ func WaitForMessage(ctx context.Context, conn *websocket.Conn, MaxMsgSize int64,
 
 		defer func() {
 			if err := recover(); err != nil {
-				logging.Logger.Warn("wait_for_message: panic occurred")
+				log.LogEntryWithTestMetadataAndSubtestKind(testMetadata, spec.SubtestDownload).Warn("wait_for_message: panic occurred")
 			}
 		}()
 
