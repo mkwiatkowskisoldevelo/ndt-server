@@ -44,7 +44,7 @@ and `cert.pem`) using bash and OpenSSL
 build the docker container for `ndt-server`
 
 ```bash
-docker build . -t v-pim/ndt-server:1.5.5-SNAPSHOT
+docker build . -t v-pim/ndt-server:1.5.5
 ```
 
 enable BBR (with which ndt7 works much better)
@@ -62,7 +62,7 @@ docker run --network=host                    \
            --read-only                       \
            --user `id -u`:`id -g`            \
            --cap-drop=all                    \
-           v-pim/ndt-server:1.5.5-SNAPSHOT   \
+           v-pim/ndt-server:1.5.5            \
            -datadir /datadir                 \
            -ndt5_addr :3001                  \
            -ndt5_ws_addr :3002               \
